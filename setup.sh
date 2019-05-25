@@ -4,7 +4,8 @@ mkdir -p ${HOME}/.dotbackups
 
 mv ${HOME}/.vimrc ${HOME}/.dotbackups/
 cp ${HOME}/.bashrc ${HOME}/.dotbackups/
-cp .vimrc ${HOME}/.vimrc
+cp .vimrc ${HOME}/
+cp .tmux.conf ${HOME}/
 
 # start badwolf setup
 if [ ! -d "${HOME}/.gitrepos/badwolf" ]; then

@@ -52,8 +52,22 @@ vim.keymap.set("t", "<Esc><Esc>", "<C-\\><C-n>", { desc = "Exit terminal mode" }
 
 -- Diagnostic navigation and display
 vim.keymap.set("n", "gl", vim.diagnostic.open_float, { desc = "Show diagnostic message" })
-vim.keymap.set("n", "[d", vim.diagnostic.goto_prev, { desc = "Previous diagnostic" })
-vim.keymap.set("n", "]d", vim.diagnostic.goto_next, { desc = "Next diagnostic" })
+
+-- Buffer management
+vim.keymap.set("n", "<leader>bd", function()
+	require("mini.bufremove").delete()
+end, { desc = "Delete buffer" })
+vim.keymap.set("n", "<leader>bD", function()
+	require("mini.bufremove").delete(0, true)
+end, { desc = "Force delete buffer" })
+vim.keymap.set("n", "<leader>bo", function()
+	local current = vim.api.nvim_get_current_buf()
+	for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+		if buf ~= current and vim.api.nvim_buf_is_loaded(buf) and vim.fn.buflisted(buf) == 1 then
+			require("mini.bufremove").delete(buf, false)
+		end
+	end
+end, { desc = "Close other buffers" })
 
 -- Window navigation
 vim.keymap.set("n", "<C-h>", "<C-w><C-h>", { desc = "Move focus to the left window" })
@@ -121,7 +135,7 @@ require("lazy").setup({
 	{
 		"coder/claudecode.nvim",
 		dependencies = { "folke/snacks.nvim" },
-		config = true,
+		opts = {},
 		keys = {
 			{ "<leader>a", nil, desc = "AI/Claude Code" },
 			{ "<leader>ac", "<cmd>ClaudeCode<cr>", desc = "Toggle Claude" },
@@ -182,6 +196,7 @@ require("lazy").setup({
 		config = function()
 			require("which-key").setup()
 			require("which-key").add({
+				{ "<leader>b", group = "[B]uffer" },
 				{ "<leader>c", group = "[C]ode" },
 				{ "<leader>d", group = "[D]ebug" },
 				{ "<leader>g", group = "[G]it" },
@@ -190,6 +205,7 @@ require("lazy").setup({
 				{ "<leader>f", group = "[F]ind" },
 				{ "<leader>t", group = "[T]est" },
 				{ "<leader>v", group = "[V]env" },
+				{ "<leader>o", group = "[O]verseer" },
 				{ "<leader>x", group = "Trouble" },
 			})
 		end,
@@ -453,12 +469,29 @@ require("lazy").setup({
 					end, { "i", "s" }),
 				}),
 				sources = {
+					{ name = "vim-dadbod-completion" },
 					{ name = "nvim_lsp" },
 					{ name = "luasnip" },
 					{ name = "path" },
 				},
 			})
 		end,
+	},
+
+	-- Database
+	{
+		"kristijanhusak/vim-dadbod-ui",
+		dependencies = {
+			{ "tpope/vim-dadbod", lazy = true },
+			{ "kristijanhusak/vim-dadbod-completion", ft = { "sql", "mysql", "plsql" }, lazy = true },
+		},
+		cmd = { "DBUI", "DBUIToggle", "DBUIAddConnection", "DBUIFindBuffer" },
+		init = function()
+			vim.g.db_ui_use_nerd_font_icons = 1
+		end,
+		keys = {
+			{ "<leader>db", "<cmd>DBUIToggle<CR>", desc = "Toggle DBUI" },
+		},
 	},
 
 	-- Colorscheme
@@ -469,6 +502,9 @@ require("lazy").setup({
 			vim.cmd.colorscheme("tokyonight-night")
 			vim.cmd.hi("Comment gui=none")
 		end,
+	},
+	{
+		"nyoom-engineering/oxocarbon.nvim",
 	},
 
 	-- Todo comments highlighting
@@ -581,12 +617,53 @@ require("lazy").setup({
 		config = function()
 			require("mini.ai").setup({ n_lines = 500 })
 			require("mini.surround").setup()
+			require("mini.bufremove").setup()
+			require("mini.bracketed").setup({
+				jump = { suffix = "" }, -- disable [j/]j to preserve Jupyter cell keymaps
+			})
 			local statusline = require("mini.statusline")
 			statusline.setup({ use_icons = vim.g.have_nerd_font })
 			statusline.section_location = function()
 				return "%2l:%-2v"
 			end
 		end,
+	},
+
+	-- Bufferline (visual buffer tabs)
+	{
+		"akinsho/bufferline.nvim",
+		version = "*",
+		dependencies = { "nvim-tree/nvim-web-devicons" },
+		event = "VeryLazy",
+		opts = {
+			options = {
+				diagnostics = "nvim_lsp",
+				diagnostics_indicator = function(count, level)
+					local icon = level:match("error") and " " or " "
+					return " " .. icon .. count
+				end,
+				offsets = {
+					{
+						filetype = "neo-tree",
+						text = "File Explorer",
+						highlight = "Directory",
+						separator = true,
+					},
+				},
+				always_show_bufferline = false,
+				show_close_icon = false,
+			},
+		},
+		keys = {
+			{ "<S-h>", "<cmd>BufferLineCyclePrev<cr>", desc = "Previous buffer" },
+			{ "<S-l>", "<cmd>BufferLineCycleNext<cr>", desc = "Next buffer" },
+			{ "<leader>bl", "<cmd>BufferLineMoveNext<cr>", desc = "Move buffer right" },
+			{ "<leader>bh", "<cmd>BufferLineMovePrev<cr>", desc = "Move buffer left" },
+			{ "<leader>bp", "<cmd>BufferLineTogglePin<cr>", desc = "Pin buffer" },
+			{ "<leader>bP", "<cmd>BufferLineGroupClose ungrouped<cr>", desc = "Close non-pinned" },
+			{ "<leader>bs", "<cmd>BufferLinePick<cr>", desc = "Pick buffer" },
+			{ "<leader>bS", "<cmd>BufferLinePickClose<cr>", desc = "Pick to close" },
+		},
 	},
 
 	-- Treesitter (syntax highlighting and parser management)
@@ -958,6 +1035,28 @@ require("lazy").setup({
 		"lukas-reineke/indent-blankline.nvim",
 		main = "ibl",
 		opts = {},
+	},
+
+	-- overseer.nvim (task runner)
+	{
+		"stevearc/overseer.nvim",
+		cmd = { "OverseerRun", "OverseerToggle", "OverseerRunCmd" },
+		keys = {
+			{ "<leader>ot", "<cmd>OverseerToggle<cr>", desc = "[O]verseer [T]oggle task list" },
+			{ "<leader>or", "<cmd>OverseerRun<cr>", desc = "[O]verseer [R]un task" },
+			{ "<leader>oa", "<cmd>OverseerQuickAction<cr>", desc = "[O]verseer Quick [A]ction" },
+			{ "<leader>oc", "<cmd>OverseerRunCmd<cr>", desc = "[O]verseer Run [C]md" },
+			{ "<leader>ol", "<cmd>OverseerRestartLast<cr>", desc = "[O]verseer Restart [L]ast" },
+		},
+		config = function()
+			require("overseer").setup({
+				task_list = {
+					direction = "right",
+					default_detail = 1,
+				},
+				templates = { "builtin" },
+			})
+		end,
 	},
 
 	-- toggleterm.nvim (quick terminal access)
